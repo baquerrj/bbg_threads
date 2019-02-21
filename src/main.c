@@ -25,7 +25,7 @@ int main( int argc, char *argv[] )
    printf("Main thread, PID %d TID %d\n",
          getpid(), (pid_t)syscall(SYS_gettid));
 
-   /* Attempting to spwan child threads */
+   /* Attempting to spawn child threads */
    pthread_create(&t1, NULL, child1_fn, log_file->name);
    pthread_create(&t2, NULL, child2_fn, log_file->name);
    pthread_join(t1, NULL);

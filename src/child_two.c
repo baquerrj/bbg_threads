@@ -1,7 +1,10 @@
 //#include <sys/syscall.h>
-//#include <unistd.h>  
+//#include <unistd.h>
 //#include <stdlib.h>
 #include "child_two.h"
+
+static time_t my_time;
+static file_t *log_file;
 
 void child2_exit(FILE* fid)
 {
@@ -13,7 +16,9 @@ void child2_exit(FILE* fid)
 
 void *child2_fn(void *arg)
 {
-   static file_t *log_file;
+   /* Get time that thread was spawned */
+   time(&my_time);
+
    if( NULL != arg )
    {
       pthread_mutex_lock(&mutex);
@@ -21,8 +26,8 @@ void *child2_fn(void *arg)
       log_file->name = (char*)arg;
       log_file->fid = fopen( log_file->name, "a" );
 
-      fprintf( log_file->fid, "New thread started, PID %d TID %d\n",
-               getpid(), (pid_t)syscall(SYS_gettid));
+      fprintf( log_file->fid, "New thread (%d) started at %s\n",
+               (pid_t)syscall(SYS_gettid), ctime(&my_time));
       pthread_mutex_unlock(&mutex);
    }
    sleep(2);

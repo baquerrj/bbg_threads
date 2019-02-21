@@ -2,6 +2,7 @@
 #define CHILD_ONE_H
 
 #include "common.h"
+#include <time.h>
 
 void child1_exit(FILE *fid);
 void *child1_fn(void *arg);

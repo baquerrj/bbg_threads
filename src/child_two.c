@@ -6,13 +6,18 @@
 static time_t my_time;
 static file_t *log_file;
 
-void child2_exit(FILE* fid)
+void child2_exit(void)
 {
-   printf("Thread %d terminating... closing file handler.\n",
-         (pid_t)syscall(SYS_gettid));
-   fclose( fid );
+   time(&my_time);
+   while( pthread_mutex_lock(&mutex) );
+   fprintf( log_file->fid, "%sTID [%d]: Goodbye World!\n",
+            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   fclose( log_file->fid );
+   pthread_mutex_unlock(&mutex);
    return;
 }
+
+
 
 void *child2_fn(void *arg)
 {
@@ -26,11 +31,11 @@ void *child2_fn(void *arg)
       log_file->name = (char*)arg;
       log_file->fid = fopen( log_file->name, "a" );
 
-      fprintf( log_file->fid, "New thread (%d) started at %s\n",
-               (pid_t)syscall(SYS_gettid), ctime(&my_time));
+      fprintf( log_file->fid, "%sTID [%d]: Hello World!\n",
+               ctime(&my_time), (pid_t)syscall(SYS_gettid));
       pthread_mutex_unlock(&mutex);
    }
    sleep(2);
-   child2_exit(log_file->fid);
+   child2_exit();
    return NULL;
 }

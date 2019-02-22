@@ -6,11 +6,13 @@
 #include <time.h>
 #include <signal.h>
 #include <string.h>
+
+
 static timer_t    timerid;
 struct itimerspec trigger;
 
 static time_t my_time;
-static file_t *log_file;
+static file_t *log;
 static FILE *stat_file;
 
 static pthread_mutex_t  tmutex = PTHREAD_MUTEX_INITIALIZER;
@@ -21,10 +23,12 @@ void child2_exit(void)
    time(&my_time);
    timer_delete(timerid);
    while( pthread_mutex_lock(&mutex) );
-   fprintf( log_file->fid, "%sTID Child 2 [%d]: Goodbye World!\n",
+   fprintf( log->fid, "%sTID Child 2 [%d]: Goodbye World!\n",
             ctime(&my_time), (pid_t)syscall(SYS_gettid));
-   fclose( log_file->fid );
+   fclose( log->fid );
    pthread_mutex_unlock(&mutex);
+
+   free( log );
    pthread_exit(0);
 }
 
@@ -33,7 +37,7 @@ static void sig_handler(int signo)
 {
    if( signo == SIGUSR1 )
    {
-      printf("Received SIGUSR1 %d! Exiting...\n", signo);
+      printf("Received SIGUSR1! Exiting...\n");
       child2_exit();
    }
    else if( signo == SIGUSR2 )
@@ -41,8 +45,19 @@ static void sig_handler(int signo)
       printf("Received SIGUSR2! Exiting...\n");
       child2_exit();
    }
+   else if( signo == SIGCONT )
+   {
+      struct timespec thTimeSpec;
+
+      clock_gettime(CLOCK_REALTIME, &thTimeSpec);
+      printf("Clock_gettime: %ld s - %ld ns\n",
+            thTimeSpec.tv_sec, thTimeSpec.tv_nsec);
+      pthread_cond_broadcast(&tcond);
+   }
+   return;
 }
 
+#if 0
 static void timer_handler(union sigval sv)
 {
    char *s = sv.sival_ptr;
@@ -56,37 +71,34 @@ static void timer_handler(union sigval sv)
    pthread_cond_broadcast(&tcond);
    return;
 }
+#endif
 
-
-void *child2_fn(void *arg)
+static int report_cpu(void)
 {
-
-   /* Get time that thread was spawned */
-   time(&my_time);
-
-
-   if( NULL != arg )
+   while( 1 )
    {
-      pthread_mutex_lock(&mutex);
-      log_file = malloc( sizeof( file_t ) );
-      log_file->name = (char*)arg;
-      log_file->fid = fopen( log_file->name, "a" );
-      fprintf( stdout, "%sTID Child 2 [%d]: Hello World!\n",
-               ctime(&my_time), (pid_t)syscall(SYS_gettid));
-      fprintf( log_file->fid, "%sTID Child 2 [%d]: Hello World!\n",
-               ctime(&my_time), (pid_t)syscall(SYS_gettid));
-
-      signal(SIGUSR1, sig_handler);
-      signal(SIGUSR2, sig_handler);
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_lock(&tmutex);
+      pthread_cond_wait(&tcond, &tmutex);
+      pthread_mutex_unlock(&tmutex);
+      char buffer[100];
+      while( NULL != fgets( buffer, 100, stat_file ) )
+      {
+         if( ferror( stat_file ) )
+         {
+            perror( "Error reading file!" );
+            clearerr( stat_file );
+            rewind( stat_file );
+            return 1;
+         }
+         fprintf( log->fid, "%s", buffer );
+      }
+      rewind( stat_file );
    }
-   else
-   {
-      perror( "ERROR" );
-      fprintf( stderr, "Could not open file\n" );
-      return NULL;
-   }
+   return 0;
+}
 
+static int setup_timer(void)
+{
    /* Set up timer */
    char info[] = "timer woken up!";
    struct sigevent sev;
@@ -94,8 +106,10 @@ void *child2_fn(void *arg)
    memset(&sev, 0, sizeof(struct sigevent));
    memset(&trigger, 0, sizeof(struct itimerspec));
 
-   sev.sigev_notify = SIGEV_THREAD;
-   sev.sigev_notify_function = &timer_handler;
+   sev.sigev_notify = SIGEV_SIGNAL;
+//   sev.sigev_notify_function = &timer_handler;
+   sev.sigev_signo = SIGCONT;
+   signal(SIGCONT, sig_handler);
    sev.sigev_value.sival_ptr = &info;
 
    timer_create(CLOCK_REALTIME, &sev, &timerid);
@@ -108,35 +122,61 @@ void *child2_fn(void *arg)
    pthread_cond_init( &tcond, NULL );
 
    timer_settime(timerid, 0, &trigger, NULL);
+   return 0;
+}
 
-   /* Setting up timer */
+void *child2_fn(void *arg)
+{
+   /* Get time that thread was spawned */
+   time(&my_time);
+
+   static int failure = 1;
+   /* Initialize thread */
+   if( NULL == arg )
+   {
+      fprintf( stderr, "Thread requires name of log file!\n" );
+      pthread_exit(&failure);
+   }
+
+   /* Take mutex to write to file */
+   pthread_mutex_lock(&mutex);
+
+   log = malloc( sizeof( file_t ) );
+   if( NULL == log )
+   {
+      fprintf( stderr, "Ecountered error allocating memory for log file!\n");
+      pthread_exit(&failure);
+   }
+
+   log->name = (char*)arg;
+   log->fid = fopen( log->name, "a" );
+   if( NULL == log->fid )
+   {
+      perror( "Ecountered error opening log file!\n" );
+      pthread_exit(&failure);
+   }
+
+   fprintf( stdout, "%sTID Child 2 [%d]: Hello World!\n",
+            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   fprintf( log->fid, "%sTID Child 2 [%d]: Hello World!\n",
+            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+
+   /* Release file mutex */
+   pthread_mutex_unlock(&mutex);
+
    stat_file = fopen( "/proc/stat", "r" );
    if( stat_file == NULL )
    {
-      perror( "error opening /proc/stat" );
-      child2_exit();
+      perror( "Encountered error opening /proc/stat" );
+      pthread_exit(&failure);
    }
    printf( "Opened /proc/stat for reading\n");
 
-   while ( 1 )
-   {
-      pthread_mutex_lock(&tmutex);
-      pthread_cond_wait(&tcond, &tmutex);
-      pthread_mutex_unlock(&tmutex);
-      char buffer[100];
-      while( NULL != fgets( buffer, 100, stat_file ) )
-      {
-         if( ferror( stat_file ) )
-         {
-            perror( "Error reading file" );
-            clearerr( stat_file );
-            rewind( stat_file );
-            break;
-         }
-         fprintf( log_file->fid, "%s", buffer );
-      }
-      rewind( stat_file );
-   }
+   signal(SIGUSR1, sig_handler);
+   signal(SIGUSR2, sig_handler);
+
+   setup_timer();
+   while( !report_cpu() );
    child2_exit();
    return NULL;
 }

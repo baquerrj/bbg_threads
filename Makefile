@@ -19,7 +19,7 @@ $(RES)/%.o: $(SRC)/%.c
 
 $(PROG): $(OBJS)
 	mkdir -p $(BIN)
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -lrt
 
 clean:
 	rm -rf $(BIN)

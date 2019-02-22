@@ -18,14 +18,27 @@ static FILE *stat_file;
 static pthread_mutex_t  tmutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t   tcond = PTHREAD_COND_INITIALIZER;
 
+static void print_header(FILE* file)
+{
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
+   fprintf( file, "\n========================================\n" );
+   fprintf( file, "Thread 2 [%d]: %ld s - %ld ns\n",
+            (pid_t)syscall(SYS_gettid), time.tv_sec, time.tv_nsec );
+   return;
+}
+
+
 void child2_exit(void)
 {
    time(&my_time);
    timer_delete(timerid);
+
    while( pthread_mutex_lock(&mutex) );
-   fprintf( log->fid, "%sTID Child 2 [%d]: Goodbye World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   print_header( log->fid );
+   fprintf( log->fid, "Goodbye World!\n" );
    fclose( log->fid );
+   fclose( stat_file );
    pthread_mutex_unlock(&mutex);
 
    free( log );
@@ -73,6 +86,7 @@ static void timer_handler(union sigval sv)
 }
 #endif
 
+
 static int report_cpu(void)
 {
    while( 1 )
@@ -81,6 +95,8 @@ static int report_cpu(void)
       pthread_cond_wait(&tcond, &tmutex);
       pthread_mutex_unlock(&tmutex);
       char buffer[100];
+      print_header( log->fid );
+      fprintf( log->fid, "Reading CPU Utilization:\n" );
       while( NULL != fgets( buffer, 100, stat_file ) )
       {
          if( ferror( stat_file ) )
@@ -156,10 +172,8 @@ void *child2_fn(void *arg)
       pthread_exit(&failure);
    }
 
-   fprintf( stdout, "%sTID Child 2 [%d]: Hello World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
-   fprintf( log->fid, "%sTID Child 2 [%d]: Hello World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   print_header( log->fid );
+   fprintf( log->fid, "Hello World!\n" );
 
    /* Release file mutex */
    pthread_mutex_unlock(&mutex);

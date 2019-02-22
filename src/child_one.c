@@ -8,27 +8,43 @@
 static time_t my_time;
 static file_t *log;
 
+static void print_header(FILE* file)
+{
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
+   fprintf( file, "\n========================================\n" );
+   fprintf( file, "Thread 1 [%d]: %ld s - %ld ns\n",
+            (pid_t)syscall(SYS_gettid), time.tv_sec, time.tv_nsec );
+   return;
+}
+
+
 void child1_exit(void)
 {
    time(&my_time);
+
    while( pthread_mutex_lock(&mutex) );
-   fprintf( log->fid, "%sTID Child 1 [%d]: Goodbye World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   print_header( log->fid );
+   fprintf( log->fid, "Goodbye World!\n" );
    fclose( log->fid );
    pthread_mutex_unlock(&mutex);
+
+   free( log );
    pthread_exit(0);
 }
+
+
 
 static void sig_handler(int signo)
 {
    if( signo == SIGUSR1 )
    {
-      printf("Received SIGUSR1! Exiting...\n",
+      printf("Received SIGUSR1! Exiting...\n");
       child1_exit();
    }
    else if( signo == SIGUSR2 )
    {
-      printf("Received SIGUSR2! Exiting...\n",
+      printf("Received SIGUSR2! Exiting...\n");
       child1_exit();
    }
 }
@@ -64,10 +80,8 @@ void *child1_fn(void *arg)
       pthread_exit(&failure);
    }
 
-   fprintf( stdout, "%sTID Child 1 [%d]: Hello World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
-   fprintf( log->fid, "%sTID Child 1 [%d]: Hello World!\n",
-            ctime(&my_time), (pid_t)syscall(SYS_gettid));
+   print_header( log->fid );
+   fprintf( log->fid, "Hello World!\n" );
 
    /* Release file mutex */
    pthread_mutex_unlock(&mutex);

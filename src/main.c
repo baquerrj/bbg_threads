@@ -21,6 +21,11 @@ int main( int argc, char *argv[] )
       log_file->name = argv[1];
       printf( "Opened file %s\n", argv[1] );
    }
+   else
+   {
+      fprintf( stderr, "Name of log file required!\n" );
+      return 1;
+   }
 
    printf("Main thread, PID %d TID %d\n",
          getpid(), (pid_t)syscall(SYS_gettid));

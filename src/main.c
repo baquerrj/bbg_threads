@@ -10,16 +10,33 @@ static pthread_t t2;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+static void print_header(FILE *file)
+{
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
+   fprintf( file, "=====================================================\n" );
+   fprintf( file, "Master Thread [%d]: %ld s - %ld ns\n",
+            (pid_t)syscall(SYS_gettid), time.tv_sec, time.tv_nsec );
+   return;
+}
 int main( int argc, char *argv[] )
 {
-   static file_t *log_file;
+   static time_t master_time;
+   static file_t *log;
+   args_t *args;
    printf( "Number of arguments %d\n", argc );
    if( argc > 1 )
    {
-      log_file = malloc( sizeof( file_t ) );
-      log_file->fid = fopen( argv[1], "a" );
-      log_file->name = argv[1];
+      log = malloc( sizeof( file_t ) );
+      log->fid = fopen( argv[1], "a" );
+      log->name = argv[1];
       printf( "Opened file %s\n", argv[1] );
+      args = malloc(sizeof(args_t));
+      args->arg1 = log->name;
+      if( argv[2] )
+      {
+         args->arg2 = argv[2];
+      }
    }
    else
    {
@@ -27,13 +44,33 @@ int main( int argc, char *argv[] )
       return 1;
    }
 
-   printf("Main thread, PID %d TID %d\n",
-         getpid(), (pid_t)syscall(SYS_gettid));
+   time(&master_time);
+   print_header( log->fid );
+   fprintf( log->fid, "Starting Threads! Start Time: %s\n",
+            ctime(&master_time));
+   print_header( stdout );
+   fprintf( stdout, "Starting Threads! Start Time: %s\n",
+            ctime(&master_time));
 
    /* Attempting to spawn child threads */
-   pthread_create(&t1, NULL, child1_fn, log_file->name);
-   pthread_create(&t2, NULL, child2_fn, log_file->name);
+   pthread_create(&t1, NULL, child1_fn, (void *)args);
+   pthread_create(&t2, NULL, child2_fn, (void *)args);
    pthread_join(t1, NULL);
    pthread_join(t2, NULL);
+
+   time(&master_time);
+
+   print_header( log->fid );
+   fprintf( log->fid, "All threads exited! Main thread exiting... " );
+   fprintf( log->fid, "End Time: %s",
+            ctime(&master_time));
+   fclose( log->fid );
+
+   print_header( stdout );
+   fprintf( stdout, "All threads exited! Main thread exiting... " );
+   fprintf( stdout, "End Time: %s",
+            ctime(&master_time));
+   free( log );
+   free( args );
    return 0;
 }

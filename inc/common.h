@@ -12,6 +12,11 @@ typedef struct file_s {
    FILE *fid;
 } file_t;
 
+typedef struct args_s {
+   void *arg1;
+   void *arg2;
+} args_t;
+
 extern pthread_mutex_t mutex;
 
 #endif /* COMMON_H */

@@ -10,7 +10,6 @@
 static timer_t    timerid;
 struct itimerspec trigger;
 
-static time_t thread_time;
 static file_t *log;
 static FILE *stat_file;
 
@@ -22,7 +21,7 @@ static void print_header(FILE* file)
    struct timespec time;
    clock_gettime(CLOCK_REALTIME, &time);
    fprintf( file, "\n=====================================================\n" );
-   fprintf( file, "Thread 2 [%d]: %ld s - %ld ns\n",
+   fprintf( file, "Thread 2 [%d]: %ld.%ld secs\n",
             (pid_t)syscall(SYS_gettid), time.tv_sec, time.tv_nsec );
    return;
 }
@@ -30,8 +29,9 @@ static void print_header(FILE* file)
 
 void child2_exit(int exit_status)
 {
-   time(&thread_time);
-   timer_delete(timerid);
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
+//   timer_delete(timerid);
 
    while( pthread_mutex_lock(&mutex) );
    print_header( log->fid );
@@ -39,22 +39,26 @@ void child2_exit(int exit_status)
    switch( exit_status )
    {
       case SIGUSR1:
+         fprintf( stdout, "Caught SIGUSR1 Signal! Exiting...\n");
          fprintf( log->fid, "Caught SIGUSR1 Signal! Exiting...\n");
          break;
       case SIGUSR2:
+         fprintf( stdout, "Caught SIGUSR2 Signal! Exiting...\n");
          fprintf( log->fid, "Caught SIGUSR2 Signal! Exiting...\n");
          break;
       default:
          break;
    }
-   fprintf( log->fid, "Goodbye World! End Time: %s",
-            ctime(&thread_time));
+   fprintf( stdout, "Goodbye World! End Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
+   fprintf( log->fid, "Goodbye World! End Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
    fclose( log->fid );
    pthread_mutex_unlock(&mutex);
 
    fclose( stat_file );
    free( log );
-   pthread_exit(0);
+   pthread_exit(EXIT_SUCCESS);
 }
 
 
@@ -134,7 +138,8 @@ static int setup_timer(void)
 void *child2_fn(void *arg)
 {
    /* Get time that thread was spawned */
-   time(&thread_time);
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
 
    static int failure = 1;
    /* Initialize thread */
@@ -164,8 +169,8 @@ void *child2_fn(void *arg)
    }
 
    print_header( log->fid );
-   fprintf( log->fid, "Hello World! Start Time: %s",
-            ctime(&thread_time));
+   fprintf( log->fid, "Hello World! Start Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
 
    /* Release file mutex */
    pthread_mutex_unlock(&mutex);

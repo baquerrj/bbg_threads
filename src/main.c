@@ -15,13 +15,12 @@ static void print_header(FILE *file)
    struct timespec time;
    clock_gettime(CLOCK_REALTIME, &time);
    fprintf( file, "=====================================================\n" );
-   fprintf( file, "Master Thread [%d]: %ld s - %ld ns\n",
+   fprintf( file, "Master Thread [%d]: %ld.%ld secs\n",
             (pid_t)syscall(SYS_gettid), time.tv_sec, time.tv_nsec );
    return;
 }
 int main( int argc, char *argv[] )
 {
-   static time_t master_time;
    static file_t *log;
    args_t *args;
    printf( "Number of arguments %d\n", argc );
@@ -43,14 +42,15 @@ int main( int argc, char *argv[] )
       fprintf( stderr, "Name of log file required!\n" );
       return 1;
    }
+   struct timespec time;
+   clock_gettime(CLOCK_REALTIME, &time);
 
-   time(&master_time);
    print_header( log->fid );
-   fprintf( log->fid, "Starting Threads! Start Time: %s\n",
-            ctime(&master_time));
+   fprintf( log->fid, "Starting Threads! Start Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
    print_header( stdout );
-   fprintf( stdout, "Starting Threads! Start Time: %s\n",
-            ctime(&master_time));
+   fprintf( log->fid, "Starting Threads! Start Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
 
    /* Attempting to spawn child threads */
    pthread_create(&t1, NULL, child1_fn, (void *)args);
@@ -58,18 +58,18 @@ int main( int argc, char *argv[] )
    pthread_join(t1, NULL);
    pthread_join(t2, NULL);
 
-   time(&master_time);
+   clock_gettime(CLOCK_REALTIME, &time);
 
    print_header( log->fid );
    fprintf( log->fid, "All threads exited! Main thread exiting... " );
-   fprintf( log->fid, "End Time: %s",
-            ctime(&master_time));
+   fprintf( log->fid, "End Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
    fclose( log->fid );
 
    print_header( stdout );
    fprintf( stdout, "All threads exited! Main thread exiting... " );
-   fprintf( stdout, "End Time: %s",
-            ctime(&master_time));
+   fprintf( stdout, "End Time: %ld.%ld secs\n",
+            time.tv_sec, time.tv_nsec );
    free( log );
    free( args );
    return 0;
